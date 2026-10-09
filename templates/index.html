@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101322">
+  <title>TubeDrop · Video downloader</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <nav class="nav">
+      <a class="brand" href="/" aria-label="TubeDrop home"><span class="brand-mark">▶</span> TubeDrop</a>
+      <span class="nav-note">A simple video utility</span>
+    </nav>
+
+    <section class="hero">
+      <div class="eyebrow"><span class="dot"></span> SIMPLE · RESPONSIVE · NO INSTALLATION</div>
+      <h1>Your video.<br><span>Ready to save.</span></h1>
+      <p class="intro">Paste a YouTube video link and prepare a downloadable file. Works in a browser on desktop and mobile.</p>
+
+      <form id="download-form" class="download-card">
+        <label for="url">YouTube video URL</label>
+        <div class="url-row">
+          <input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="url" required>
+          <button id="download-btn" type="submit"><span>Download</span><span aria-hidden="true">↗</span></button>
+        </div>
+        <p class="hint">Single videos only. Playlist URLs are not supported.</p>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </form>
+
+      <div class="feature-row">
+        <div class="feature"><span class="feature-icon">↘</span><div><strong>Browser download</strong><small>Your browser manages the save location</small></div></div>
+        <div class="feature"><span class="feature-icon">▣</span><div><strong>Phone-friendly</strong><small>Responsive layout for small screens</small></div></div>
+        <div class="feature"><span class="feature-icon">⌁</span><div><strong>Simple workflow</strong><small>Paste a link and start</small></div></div>
+      </div>
+    </section>
+
+    <section class="how">
+      <div><span class="step">01</span><h2>Copy a link</h2><p>Copy the URL of a video you have permission to download.</p></div>
+      <div><span class="step">02</span><h2>Prepare the file</h2><p>The Python service processes the video request.</p></div>
+      <div><span class="step">03</span><h2>Save on your device</h2><p>Your browser handles the download and destination.</p></div>
+    </section>
+
+    <aside class="notice">
+      <strong>Use responsibly</strong>
+      <p>Only download videos you own, have permission to save, or are otherwise allowed to download. Follow YouTube’s terms and applicable copyright law.</p>
+    </aside>
+
+    <footer><span>TubeDrop · Personal project starter</span><span>Built with Flask + yt-dlp</span></footer>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
