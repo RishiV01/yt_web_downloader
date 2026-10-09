@@ -68,28 +68,31 @@ def download():
     )
 
     try:
-        options = {
-            "outtmpl": output_template,
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "restrictfilenames": True,
-            "format": (
-                "best[height<=720][ext=mp4]"
-                "/best[height<=720]/best"
-            ),
-            "merge_output_format": "mp4",
-            "socket_timeout": 30,
-            "retries": 1,
-            "fragment_retries": 1,
-        }
+        
+try:
+    options = {
+        "outtmpl": output_template,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["tv"]
+            }
+        },
+        "restrictfilenames": True,
+        "format": "best[height<=720][ext=mp4]/best[height<=720]/best",
+        "merge_output_format": "mp4",
+        "socket_timeout": 30,
+        "retries": 1,
+        "fragment_retries": 1,
+    }
 
-        app.logger.info(
-            "Starting download. yt-dlp version: %s",
-            yt_dlp.version.__version__,
-        )
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(url, download=True)
+        title = info.get("title") or "youtube-video"
 
-        with yt_dlp.YoutubeDL(options) as ydl:
+      with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
             title = info.get("title") or "youtube-video"
 
