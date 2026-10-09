@@ -81,11 +81,7 @@ def download():
             "socket_timeout": 30,
             "retries": 1,
             "fragment_retries": 1,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["tv"]
-                }
-            },
+         
         }
 
         app.logger.info(
