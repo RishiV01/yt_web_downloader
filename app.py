@@ -26,7 +26,6 @@ download_lock = threading.Lock()
 
 
 def valid_youtube_url(raw_url):
-    """Accept only URLs from approved YouTube hostnames."""
     if not raw_url or len(raw_url) > 2000:
         return False
 
@@ -59,7 +58,7 @@ def download():
 
     if not download_lock.acquire(blocking=False):
         return jsonify(
-            error="A download is already running. Please try again shortly."
+            error="A download is already running. Try again shortly."
         ), 429
 
     temp_dir = tempfile.mkdtemp(prefix="yt-download-")
@@ -68,31 +67,33 @@ def download():
     )
 
     try:
-        
-try:
-    options = {
-        "outtmpl": output_template,
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv"]
-            }
-        },
-        "restrictfilenames": True,
-        "format": "best[height<=720][ext=mp4]/best[height<=720]/best",
-        "merge_output_format": "mp4",
-        "socket_timeout": 30,
-        "retries": 1,
-        "fragment_retries": 1,
-    }
+        options = {
+            "outtmpl": output_template,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "restrictfilenames": True,
+            "format": (
+                "best[height<=720][ext=mp4]"
+                "/best[height<=720]/best"
+            ),
+            "merge_output_format": "mp4",
+            "socket_timeout": 30,
+            "retries": 1,
+            "fragment_retries": 1,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["tv"]
+                }
+            },
+        }
 
-    with yt_dlp.YoutubeDL(options) as ydl:
-        info = ydl.extract_info(url, download=True)
-        title = info.get("title") or "youtube-video"
+        app.logger.info(
+            "Starting download with yt-dlp version %s",
+            yt_dlp.version.__version__,
+        )
 
-      with yt_dlp.YoutubeDL(options) as ydl:
+        with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
             title = info.get("title") or "youtube-video"
 
@@ -106,7 +107,7 @@ try:
 
         if not candidates:
             raise RuntimeError(
-                "Download completed without producing a video file."
+                "No video file was produced by the downloader."
             )
 
         video_path = max(
@@ -124,31 +125,26 @@ try:
             video_path,
             as_attachment=True,
             download_name=download_name,
-            conditional=False,
         )
 
-        # Release resources after the response finishes.
         def cleanup():
-            try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            finally:
-                if download_lock.locked():
-                    download_lock.release()
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            if download_lock.locked():
+                download_lock.release()
 
         response.call_on_close(cleanup)
-
         return response
 
     except yt_dlp.utils.DownloadError:
-        app.logger.exception("yt-dlp could not download the video")
+        app.logger.exception("yt-dlp download failed")
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         download_lock.release()
 
         return jsonify(
             error=(
-                "YouTube refused the download request or the video "
-                "could not be accessed. Check the server logs for details."
+                "YouTube could not provide this video. "
+                "Check the server logs for the underlying error."
             )
         ), 502
 
