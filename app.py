@@ -1,5 +1,7 @@
+
 import os
 import re
+import shutil
 import tempfile
 import threading
 from pathlib import Path
@@ -9,23 +11,33 @@ from flask import Flask, render_template, request, send_file, jsonify
 import yt_dlp
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # URL form only, not video size
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
 ALLOWED_HOSTS = {
-    "youtube.com", "www.youtube.com", "m.youtube.com",
-    "music.youtube.com", "youtu.be", "www.youtube-nocookie.com",
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "youtu.be",
+    "www.youtube-nocookie.com",
 }
+
 download_lock = threading.Lock()
 
 
 def valid_youtube_url(raw_url):
-    """Accept only ordinary YouTube URLs, not arbitrary URLs."""
+    """Accept only URLs from approved YouTube hostnames."""
     if not raw_url or len(raw_url) > 2000:
         return False
+
     try:
         parsed = urlparse(raw_url.strip())
         host = (parsed.hostname or "").lower()
-        return parsed.scheme in ("http", "https") and host in ALLOWED_HOSTS
+
+        return (
+            parsed.scheme in ("http", "https")
+            and host in ALLOWED_HOSTS
+        )
     except ValueError:
         return False
 
@@ -41,15 +53,19 @@ def download():
     url = (data.get("url") or "").strip()
 
     if not valid_youtube_url(url):
-        return jsonify(error="Please enter a valid YouTube video URL."), 400
+        return jsonify(
+            error="Please enter a valid YouTube video URL."
+        ), 400
 
-    # Free hosting has limited CPU, memory, disk and request time.
-    # Keep this starter app single-download-at-a-time.
     if not download_lock.acquire(blocking=False):
-        return jsonify(error="A download is already running. Please try again shortly."), 429
+        return jsonify(
+            error="A download is already running. Please try again shortly."
+        ), 429
 
     temp_dir = tempfile.mkdtemp(prefix="yt-download-")
-    output_template = os.path.join(temp_dir, "%(title).100s-%(id)s.%(ext)s")
+    output_template = os.path.join(
+        temp_dir, "%(title).100s-%(id)s.%(ext)s"
+    )
 
     try:
         options = {
@@ -58,13 +74,20 @@ def download():
             "quiet": True,
             "no_warnings": True,
             "restrictfilenames": True,
-            # Prefer MP4 up to 720p to keep free-hosting resource use reasonable.
-            "format": "best[height<=720][ext=mp4]/best[height<=720]/best",
+            "format": (
+                "best[height<=720][ext=mp4]"
+                "/best[height<=720]/best"
+            ),
             "merge_output_format": "mp4",
-            "socket_timeout": 20,
+            "socket_timeout": 30,
             "retries": 1,
             "fragment_retries": 1,
         }
+
+        app.logger.info(
+            "Starting download. yt-dlp version: %s",
+            yt_dlp.version.__version__,
+        )
 
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -73,49 +96,81 @@ def download():
         candidates = [
             Path(temp_dir) / name
             for name in os.listdir(temp_dir)
-            if Path(temp_dir, name).is_file()
-            and Path(temp_dir, name).suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}
+            if (Path(temp_dir) / name).is_file()
+            and (Path(temp_dir) / name).suffix.lower()
+            in {".mp4", ".mkv", ".webm", ".mov"}
         ]
-        if not candidates:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            download_lock.release()
-            return jsonify(error="The video could not be prepared. Try another video."), 422
 
-        video_path = max(candidates, key=lambda p: p.stat().st_size)
-        safe_title = re.sub(r"[^A-Za-z0-9._ -]", "", title).strip(" .")[:80] or "youtube-video"
+        if not candidates:
+            raise RuntimeError(
+                "Download completed without producing a video file."
+            )
+
+        video_path = max(
+            candidates,
+            key=lambda path: path.stat().st_size,
+        )
+
+        safe_title = re.sub(
+            r"[^A-Za-z0-9._ -]", "", title
+        ).strip(" .")[:80] or "youtube-video"
+
         download_name = safe_title + video_path.suffix
 
         response = send_file(
             video_path,
             as_attachment=True,
             download_name=download_name,
-            conditional=True,
+            conditional=False,
         )
 
-        # Remove temporary files once the response finishes streaming.
-        @response.call_on_close
+        # Release resources after the response finishes.
         def cleanup():
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            download_lock.release()
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            finally:
+                if download_lock.locked():
+                    download_lock.release()
+
+        response.call_on_close(cleanup)
 
         return response
 
-    except Exception:
-        import shutil
+    except yt_dlp.utils.DownloadError:
+        app.logger.exception("yt-dlp could not download the video")
+
         shutil.rmtree(temp_dir, ignore_errors=True)
         download_lock.release()
-        app.logger.exception("Video download failed")
+
         return jsonify(
-            error="Download failed. The video may be unavailable, restricted, or the downloader may need an update."
+            error=(
+                "YouTube refused the download request or the video "
+                "could not be accessed. Check the server logs for details."
+            )
         ), 502
+
+    except Exception:
+        app.logger.exception("Unexpected download error")
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        download_lock.release()
+
+        return jsonify(
+            error="The download failed. Please try again later."
+        ), 500
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "yt_dlp_version": yt_dlp.version.__version__,
+    }
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "5000")),
+        debug=False,
+    )
