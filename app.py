@@ -80,6 +80,10 @@ def health():
 
 @app.route("/api/download", methods=["POST"])
 def download_video():
+    
+    "remote_components": ["ejs:npm"],
+    "verbose": True,
+    
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
 
